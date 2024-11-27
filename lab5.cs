@@ -1,7 +1,71 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
-public class Quadrature
+class Program
+{
+    static void Main()
+    {
+        const double I = Math.Exp(1) * Math.Log(Math.Exp(1) / 2) + Math.Log(2) + 1 - Math.Exp(1);
+
+        try
+        {
+            List<double> weight = new List<double> { 1.0, 1.0 };
+            List<double> node = new List<double> { -1.0, 1.0 };
+
+            Quadrature lab = new Quadrature(1, Math.Exp(1), weight, node);
+
+            
+            Console.WriteLine("{0,12:E6} {1,12:E6} {2,12:E6} {3,12:E6} {4,12:E6} {5,12:E6} {6,12:E6}",
+                              "1/h", "I - h1", "(I - h1)/(I - h2)", "Temp", "h2 + Temp", "I - h2 - Temp", "log2(K)");
+
+            for (int i = 1; i < 64; i *= 2)
+            {
+                double h1 = lab.Calculate(i);
+                double h2 = lab.Calculate(2 * i);
+
+                double step = 1.0 / i;
+                double diff1 = I - h1;
+                double diff2 = I - h2;
+                double ratio = diff1 / diff2;
+
+                double K = Math.Abs(1.0 + (h2 - h1) / diff2);
+                double temp = (h2 - h1) / (K - 1);
+
+                Console.WriteLine("{0,12:E6} {1,12:E6} {2,12:E6} {3,12:E6} {4,12:E6} {5,12:E6} {6,12:E6}",
+                                  step, diff1, ratio, temp, h2 + temp, diff2 - temp, Math.Log2(K));
+            }
+
+            weight = new List<double> { 5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0 };
+            node = new List<double> { -Math.Sqrt(3.0 / 5.0), 0.0, Math.Sqrt(3.0 / 5.0) };
+
+            lab.SetMethod(weight, node);
+
+            for (int i = 1; i < 64; i *= 2)
+            {
+                double h1 = lab.Calculate(i);
+                double h2 = lab.Calculate(2 * i);
+
+                double step = 1.0 / i;
+                double diff1 = I - h1;
+                double diff2 = I - h2;
+                double ratio = diff1 / diff2;
+
+                double K = Math.Abs(1.0 + (h2 - h1) / diff2);
+                double temp = (h2 - h1) / (K - 1);
+
+                Console.WriteLine("{0,12:E6} {1,12:E6} {2,12:E6} {3,12:E6} {4,12:E6} {5,12:E6} {6,12:E6}",
+                                  step, diff1, ratio, temp, h2 + temp, diff2 - temp, Math.Log2(K));
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Error: " + ex.Message);
+        }
+    }
+}
+
+class Quadrature
 {
     private double left;
     private double right;
@@ -9,91 +73,48 @@ public class Quadrature
     private List<double> weight;
     private List<double> node;
 
-    // Конструктор по умолчанию (квадратура Симсона)
-    public Quadrature()
-    {
-        left = 0.0;
-        right = 1.0;
-        h = 1.0;
-        weight = new List<double> { 1.0 / 3.0, 4.0 / 3.0, 1.0 / 3.0 };
-        node = new List<double> { -1.0, 0.0, 1.0 };
-    }
-
-    // Конструктор с параметрами
-    public Quadrature(double L, double R, IEnumerable<double> W, IEnumerable<double> N)
+    public Quadrature(double L, double R, List<double> W, List<double> N)
     {
         if ((R - L) < double.Epsilon)
-            throw new InvalidOperationException("right value < left value");
+            throw new Exception("Right value < left value");
 
-        var weights = new List<double>(W);
-        var nodes = new List<double>(N);
-
-        if (weights.Count != nodes.Count)
-            throw new InvalidOperationException("Number of nodes is not equal to number of weights");
+        if (W.Count != N.Count)
+            throw new Exception("Number of nodes is not equal to number of weights");
 
         left = L;
         right = R;
-        weight = weights;
-        node = nodes;
+        weight = W.ToList();
+        node = N.ToList();
         h = 1.0;
     }
 
-    // Конструктор копирования
-    public Quadrature(Quadrature other)
+    public void SetMethod(List<double> W, List<double> N)
     {
-        left = other.left;
-        right = other.right;
-        h = other.h;
-        weight = new List<double>(other.weight);
-        node = new List<double>(other.node);
+        if (W.Count != N.Count)
+            throw new Exception("Number of nodes is not equal to number of weights");
+
+        weight = W.ToList();
+        node = N.ToList();
     }
 
-    // Метод для вычисления текущего узла
     private double X(int i, int k)
     {
-        return ((node[i] + 1.0) * h / 2.0) + left + k * h;
+        return (h * (node[i] + 1.0) / 2.0) + left + h * k;
     }
 
-    // Метод для вычисления функции
     private double F(double x)
     {
-        if (x <= 0)
-            throw new InvalidOperationException("Logarithm argument <= 0");
         return Math.Log(0.5 * x);
     }
 
-    // Установить новый интервал
-    public void SetSegment(double L, double R)
-    {
-        if ((R - L) < double.Epsilon)
-            throw new InvalidOperationException("right value < left value");
-
-        left = L;
-        right = R;
-    }
-
-    // Установить метод
-    public void SetMethod(IEnumerable<double> W, IEnumerable<double> N)
-    {
-        var weights = new List<double>(W);
-        var nodes = new List<double>(N);
-
-        if (weights.Count != nodes.Count)
-            throw new InvalidOperationException("Number of nodes is not equal to number of weights");
-
-        weight = weights;
-        node = nodes;
-    }
-
-    // Расчет интеграла
     public double Calculate(int n)
     {
         if (n <= 0)
-            throw new InvalidOperationException("Bad N (<= 0)");
+            throw new Exception("Bad N (<= 0)");
 
         h = (right - left) / n;
-        double result = 0.0;
 
+        double result = 0.0;
         for (int k = 0; k < n; k++)
         {
             for (int i = 0; i < weight.Count; i++)
@@ -102,6 +123,7 @@ public class Quadrature
             }
         }
 
+        result /= 2.0;
         return result;
     }
 }
